@@ -29,13 +29,32 @@ GLOBAL _start
         pop rsi                         ; Restore string pos
 %endmacro
 
+%macro print_uint2 1
+        push rsi                        ; Save current string pos
+        push rbx                        ; Save current argument index 
+
+        lea rsi, [itoa_buf]             ; Buffer for generated string
+        mov rcx, %1                     ; Radix power 
+        call itoa_base2                 ; Convert string 
+        call printstr                   ; Print string
+        
+        pop rbx                         ; Restore cur argument
+        pop rsi                         ; Restore string pos
+%endmacro
+
 %define UINT32_MASK r9
 %define NEGATIVE_MASK r10
 
 %macro uint32_parse_and_print 1
         get_arg r8                      ; Get integer to print 
-        and r8, UINT32_MASK                      ; Cut to 32 bit integer
+        and r8, UINT32_MASK             ; Cut to 32 bit integer
         print_uint %1                   ; Print unsigned integer in base %1
+%endmacro
+
+%macro uint32_parse_and_print_base2 1
+        get_arg r8                      ; Get integer to print 
+        and r8, UINT32_MASK             ; Cut to 32 bit integer
+        print_uint2 %1                   ; Print unsigned integer in base %1
 %endmacro
 
 
@@ -161,21 +180,21 @@ unsigned_decimal:
 octal:
         inc rsi
         
-        uint32_parse_and_print 8
+        uint32_parse_and_print_base2 3
 
         jmp printf_loop                 ; Proceed printf
 
 hexadecimal:
         inc rsi                         ; Skip formatting symbol
 
-        uint32_parse_and_print 16
+        uint32_parse_and_print_base2 4
 
         jmp printf_loop                 ; Proceed printf
 
 binary:
         inc rsi                         ; Skip formatting symbol
 
-        uint32_parse_and_print 2
+        uint32_parse_and_print_base2 1
 
         jmp printf_loop                 ; Proceed printf
 
@@ -189,7 +208,7 @@ pointer:
         lea rsi, [itoa_buf]             ; Printing from itoa buffer
         call printstr                   ; Print dat prefix
         get_arg r8                      ; Get pointer
-        print_uint 16                   ; Print pointer in hex
+        print_uint2 4                   ; Print pointer in hex
 
         pop rsi                         ; Restore RSI
 
@@ -316,7 +335,59 @@ itoa:
         jb .reverse                     ; If not, continue
 
         pop rsi                         ; Restore RSI
-        ret         
+        ret      
+
+;================================================
+; Faster itoa for radix equal to the power of 2
+;
+; ARGS: RSI - String to save to
+;       CL - power of radix
+;       R8 - Unsigned integer to translate
+; EXIT: RDX - Length of generated string
+; DESTR: RAX, RBX, RDI, R8 
+;================================================
+
+itoa_base2:   
+        push rsi                        ; Save RSI
+        mov rdi, rsi
+        lea rbx, [alphabet]             ; Set RBX to table address
+        
+        mov r15, 1
+        shl r15, cl
+        sub r15, 1                      ; Prepare mask for modulo
+
+.translate:
+        xor rdx, rdx
+        mov rax, r8                     ; Prepare integer for division
+        and rax, r15                    ; Modulo
+        
+        xlat                            ; Translate remainder into symbol
+        stosb                           ; Copy symbol to string
+        shr r8, cl                    ; Proceed with quotient
+        cmp r8, 0                       ; Check wheter process is complete
+        jne .translate                  ; If not, move on 
+
+        mov byte [rdi], 0               ; Ensure string is null-terminated 
+
+        mov rdx, rdi                    
+        sub rdx, rsi                    ; Calculate length
+
+        dec rdi
+
+.reverse:        
+        mov ch, byte [rdi]              ; Keep symbol
+        mov cl, byte [rsi]      
+        mov byte [rsi], ch              ; Swap symbs
+        mov byte [rdi], cl
+
+        inc rsi
+        dec rdi
+        
+        cmp rsi, rdi                    ; Check wheter reversing is finished
+        jb .reverse                     ; If not, continue
+
+        pop rsi                         ; Restore RSI
+        ret        
 
 SEGMENT .data
 jmp_table:      dq      percent
