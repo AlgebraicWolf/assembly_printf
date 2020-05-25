@@ -8,4 +8,5 @@ This is simple implementation of printf function that accepts arguments via stac
 + `%c` &ndash; Character
 + `%s` &ndash; Null-terminated string 
 + `%p` &ndash; Pointer
-`invoke` macro that allows to call function easily is provided as well.
+
+I have also implemented `invoke` macro that allows to call function easily is provided as well.
