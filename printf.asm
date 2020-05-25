@@ -38,6 +38,7 @@ GLOBAL _start
         print_uint %1                   ; Print unsigned integer in base %1
 %endmacro
 
+
 _start:
         invoke printf, msg, qword [character], qword [negative], qword [negative], qword [negative], qword [negative], qword [negative], qword [zero], qword [zero], qword [zero], qword [zero], qword [zero], qword [positive], qword [positive], qword [positive], qword [positive], qword [positive], msg, string
         invoke printf, string2, lovestr, qword 3802, qword 100, qword '!', qword 127
@@ -74,25 +75,30 @@ printf:
         mov rsi, [rbp + rbx]            ; Pointer to formatted string
         add rbx, 8                      ; Proceed to next argument
 
-.loop:                                 ; Printing loop
+printf_loop:                            ; Printing loop
         call formatlen
         call printstr                   ; Print part of the string
         cmp byte [rsi], '%'             ; Check whether an argument required
-        jne .end                        ; If not, it's an end of string
+        jne printf_end                  ; If not, it's an end of string
         inc rsi                         ; Skip '%' symbol
 
-.check_percent:
-        cmp byte [rsi], '%'             
-        jne .check_s                    ; Printing '%' symbol
+        mov al, byte [rsi]              ; Load character
 
+        cmp al, '%'                     ; Check lower bound for format specifier
+        jb def_symb                     ; If it is not satisfied, skip processing
+
+        cmp al, 'x'                     ; Check upper bound for format specifies
+        ja def_symb                     ; If it is not satisfied, skip processing
+
+        jmp qword [jmp_table + rax * 8 - '%' * 8] ; Use jump table
+
+percent:
         mov rdx, 1                      ; One symbol
         call printstr                   ; Print it     
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_s:
-        cmp byte [rsi], 's'             
-        jne .check_c                    ; Printing string
+str:
         inc rsi                         ; Skip format symbol
 
         push rsi                        ; Save current string position
@@ -104,11 +110,9 @@ printf:
 
         pop rsi                         ; Restore string
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_c:
-        cmp byte [rsi], 'c'
-        jne .check_d                    ; Printing char
+char:
         inc rsi                         ; Proceed to next symbol
 
         push rsi                        ; Save pointer to string
@@ -120,11 +124,9 @@ printf:
 
         pop rsi                         ; Restore pointer to string
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_d:
-        cmp byte [rsi], 'd'
-        jne .check_u                    ; Printing signed int
+decimal:
         inc rsi                         ; Skip formatting symbol
 
         get_arg r8                      ; Get integer to print
@@ -147,47 +149,37 @@ printf:
 
 .skip_neg:
         print_uint 10                   ; Print unsigned integer in base 10
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_u:
-        cmp byte [rsi], 'u'
-        jne .check_o                    ; Printing unsigned int
+unsigned_decimal:
         inc rsi                         ; Skip formatting symbol
 
         uint32_parse_and_print 10
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_o:
-        cmp byte [rsi], 'o'
-        jne .check_x                    ; Printing unsigned oct
+octal:
         inc rsi
         
         uint32_parse_and_print 8
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_x:
-        cmp byte [rsi], 'x'
-        jne .check_b                    ; Printing unsigned hex
+hexadecimal:
         inc rsi                         ; Skip formatting symbol
 
         uint32_parse_and_print 16
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_b:
-        cmp byte [rsi], 'b'
-        jne .check_p                    ; Printing unsigned bin
+binary:
         inc rsi                         ; Skip formatting symbol
 
         uint32_parse_and_print 2
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.check_p:
-        cmp byte [rsi], 'p'
-        jne .endSwitch                  ; Printing pointer
+pointer:
         inc rsi                         ; Skip formatting symbol
 
         push rsi                        ; Save RSI
@@ -201,12 +193,12 @@ printf:
 
         pop rsi                         ; Restore RSI
 
-        jmp .loop                      ; Proceed printf
+        jmp printf_loop                 ; Proceed printf
 
-.endSwitch:
-        jmp .loop                      ; Proceed routine
+def_symb:
+        jmp printf_loop                 ; Proceed routine
         
-.end:        
+printf_end:        
         pop rbp                         ; Restore old RBP
         ret                             ; Exit function
 
@@ -312,9 +304,9 @@ itoa:
         dec rdi
 
 .reverse:        
-        mov ch, byte [rdi]             ; Keep symbol
+        mov ch, byte [rdi]              ; Keep symbol
         mov cl, byte [rsi]      
-        mov byte [rsi], ch             ; Swap symbs
+        mov byte [rsi], ch              ; Swap symbs
         mov byte [rdi], cl
 
         inc rsi
@@ -327,6 +319,22 @@ itoa:
         ret         
 
 SEGMENT .data
+jmp_table:      dq      percent
+                times 60 dq def_symb
+                dq      binary
+                dq      char
+                dq      decimal
+                times 10 dq def_symb
+                dq      octal
+                dq      pointer
+                times 2 dq def_symb
+                dq      str
+                dq      def_symb
+                dq      unsigned_decimal
+                times 2 dq def_symb
+                dq      hexadecimal
+
+
         itoa_buf:       times 65 db 0
         alphabet db "0123456789abcdefghijklmnopqrstuvwxyz"
 
